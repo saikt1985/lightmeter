@@ -73,6 +73,13 @@ th,td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);white-
 th{font-weight:600;color:var(--muted);font-family:var(--sans);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
 td.num,th.num{text-align:right}
 .tablewrap{overflow-x:auto}
+details.sect>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);cursor:pointer;margin:0}
+details.sect>summary::-webkit-details-marker{display:none}
+details.sect>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin-right:4px;transition:transform .15s}
+details.sect[open]>summary::after{transform:rotate(-135deg)}
+details.sect[open]>summary{margin-bottom:10px;color:var(--fg)}
+ol.steps{margin:0 0 12px;padding-left:1.25em;font-size:.9rem;display:grid;gap:4px}
+ol.steps b{font-weight:600}
 details summary{cursor:pointer;font-weight:600;font-size:.9rem}
 details p{font-size:.86rem;color:var(--muted)}
 .diag{font-family:var(--mono);font-size:.74rem;color:var(--muted);word-break:break-word}
@@ -107,10 +114,42 @@ details p{font-size:.86rem;color:var(--muted)}
     <div class="bar"></div>
     <div class="needle" id="needle" style="left:0%"></div>
   </div>
+  <div class="row" style="margin-top:12px;align-items:end">
+    <label style="flex:1 1 200px">Measuring
+      <select id="mode">
+        <option value="surface">Surface (reflected)</option>
+        <option value="incident">Incident (diffuser on lens)</option>
+      </select>
+    </label>
+  </div>
+  <p class="note" id="modeNote">Surface mode: fill the frame with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.</p>
 </section>
 
-<section class="panel">
-  <h2>Camera sensor</h2>
+<details class="panel sect" id="secIphone">
+  <summary>iPhone: photo from library</summary>
+  <ol class="steps">
+    <li>Once: Settings → Camera → Formats → <b>Most Compatible</b>.</li>
+    <li>In the <b>Camera app</b>, fill the frame with the surface you are measuring (or hold a sheet of paper flat over the lens for incident mode). Flash off. Shoot.</li>
+    <li>Press the button and pick that photo.</li>
+  </ol>
+  <div class="row">
+    <button class="primary" id="btnLib">Pick photo from library</button>
+    <button id="btnPhoto">Take photo</button>
+    <input id="photoIn" type="file" accept="image/jpeg,image/*" capture="environment" hidden>
+    <input id="photoLib" type="file" accept="image/jpeg,image/heic,image/*" hidden>
+  </div>
+  <div class="diag" id="photoDiag" style="margin-top:8px"></div>
+  <div id="photoMsg" class="msg" hidden style="margin-top:10px"></div>
+  <p class="note">The page reads the exposure record stored in the photo (shutter, ISO, aperture, metered brightness) and converts it to lux. Photos taken through the browser itself lose that record on iPhone, which is why the Camera app is used. Works on Android too. Each photo replaces the reading above; press Log reading to keep it.</p>
+</details>
+
+<details class="panel sect" id="secAndroid">
+  <summary>Android: live camera</summary>
+  <ol class="steps">
+    <li>Start the camera and allow access.</li>
+    <li>Fill the dashed box with the surface you are measuring (or hold a sheet of paper flat over the lens for incident mode).</li>
+    <li>Wait for the number to settle, press Hold 2 s, then Log reading.</li>
+  </ol>
   <div class="cam">
     <video id="video" playsinline muted autoplay></video>
     <div class="box" id="box" hidden></div>
@@ -125,41 +164,8 @@ details p{font-size:.86rem;color:var(--muted)}
     <button id="btnHold" disabled>Hold 2 s</button>
   </div>
   <div id="camMsg" class="msg" hidden></div>
-  <div class="grid2" style="margin-top:12px">
-    <label>Mode
-      <select id="mode">
-        <option value="surface">Surface (reflected)</option>
-        <option value="incident">Incident (diffuser on lens)</option>
-      </select>
-    </label>
-    <label>Lens aperture f/
-      <input id="aperture" type="number" step="0.1" min="1" max="4" value="1.8" inputmode="decimal">
-    </label>
-    <label id="lblRho">Target reflectance
-      <input id="rho" type="number" step="0.01" min="0.05" max="1" value="0.85" inputmode="decimal">
-    </label>
-    <label id="lblTau" hidden>Diffuser transmittance
-      <input id="tau" type="number" step="0.01" min="0.02" max="1" value="0.30" inputmode="decimal">
-    </label>
-  </div>
-  <p class="note" id="modeNote">Surface mode: fill the box with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.</p>
   <div class="diag" id="diag" style="margin-top:8px"></div>
-</section>
-
-<section class="panel">
-  <h2>Photo reading (works on iPhone)</h2>
-  <p class="note" style="margin:0 0 10px">Takes one photo and reads the camera's own exposure record (shutter, ISO, aperture and metered brightness) from the file. This works in every phone browser, including Safari and Chrome on iPhone, because it does not need live camera settings.</p>
-  <div class="row">
-    <button class="primary" id="btnPhoto">Take photo</button>
-    <button id="btnLib">From library</button>
-    <input id="photoIn" type="file" accept="image/jpeg,image/*" capture="environment" hidden>
-    <input id="photoLib" type="file" accept="image/jpeg,image/heic,image/*" hidden>
-    <span class="diag" id="photoDiag"></span>
-  </div>
-  <div id="photoMsg" class="msg" hidden style="margin-top:10px"></div>
-  <p class="note">Fill the whole frame with the matte surface (surface mode) or hold the paper over the lens (incident mode), then shoot. Turn off flash. Each photo replaces the live reading above; press Log reading to keep it.</p>
-  <p class="note"><b>iPhone:</b> photos taken through the browser lose their exposure tags, so shoot with the Camera app, then pick that photo from the library here. Set Settings → Camera → Formats → Most Compatible first so it is a JPEG.</p>
-</section>
+</details>
 
 <section class="panel" id="alsPanel" hidden>
   <h2>Ambient light sensor</h2>
@@ -170,8 +176,8 @@ details p{font-size:.86rem;color:var(--muted)}
   <p class="note">Direct reading from the phone's own light sensor (the one that dims the screen). Usually within 10 to 20 percent and already cosine corrected. Point the screen at the light.</p>
 </section>
 
-<section class="panel">
-  <h2>Calibration</h2>
+<details class="panel sect" id="secCal">
+  <summary>Calibration and lens settings</summary>
   <div class="grid2">
     <label>Reference meter reads (lux)
       <input id="refLux" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 420">
@@ -185,7 +191,19 @@ details p{font-size:.86rem;color:var(--muted)}
     <button id="btnCalReset">Reset factor</button>
   </div>
   <p class="note">The app ships with a preset surface-mode factor measured on an iPhone against a reference meter, so it works without a meter. If you have one: put the phone and the meter side by side under the same light, enter what the meter says and press Calibrate. Your factor then replaces the preset on this device. Reset returns to the preset.</p>
-</section>
+  <div class="grid2" style="margin-top:12px">
+    <label>Lens aperture f/
+      <input id="aperture" type="number" step="0.1" min="1" max="4" value="1.8" inputmode="decimal">
+    </label>
+    <label id="lblRho">Target reflectance
+      <input id="rho" type="number" step="0.01" min="0.05" max="1" value="0.85" inputmode="decimal">
+    </label>
+    <label id="lblTau" hidden>Diffuser transmittance
+      <input id="tau" type="number" step="0.01" min="0.02" max="1" value="0.30" inputmode="decimal">
+    </label>
+  </div>
+  <p class="note">Aperture is used only when a photo carries no f-number. Reflectance applies in surface mode, transmittance in incident mode.</p>
+</details>
 
 <section class="panel">
   <h2>Readings</h2>
@@ -487,7 +505,7 @@ async function processPhoto(file){
   if(Lbv!=null && Lexp!=null && (Lbv/Lexp>2.5||Lexp/Lbv>2.5)) showPhotoMsg('The two estimates disagree a lot, which usually means the frame was not evenly filled or the phone applied heavy HDR. Reshoot with the surface filling the frame.',false);
 }
 const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-if(isIOS){ $('#btnPhoto').hidden=true; $('#btnLib').classList.add('primary'); $('#btnLib').textContent='Pick photo from library'; }
+if(isIOS){ $('#btnPhoto').hidden=true; $('#secIphone').open=true; } else { $('#secAndroid').open=true; $('#btnPhoto').classList.add('primary'); $('#btnLib').classList.remove('primary'); }
 $('#btnPhoto').addEventListener('click',()=>$('#photoIn').click());
 $('#photoIn').addEventListener('change',e=>{ processPhoto(e.target.files[0]); e.target.value=''; });
 $('#btnLib').addEventListener('click',()=>$('#photoLib').click());
@@ -513,7 +531,7 @@ function applyMode(){
   setBadge(el.bMode,state.mode,''); state.ema=null; state.hold=null;
   el.modeNote.textContent = inc
     ? 'Incident mode: hold one sheet of plain white paper flat against the lens, paper facing the light. The default transmittance of 0.30 is a rough figure for 80 gsm copier paper. Calibrate once against a real meter for your paper.'
-    : 'Surface mode: fill the box with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.';
+    : 'Surface mode: fill the frame with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.';
 }
 el.btnStart.addEventListener('click',()=> state.running ? stopCamera() : startCamera());
 el.btnFlip.addEventListener('click',()=>{ state.facing = state.facing==='environment'?'user':'environment'; startCamera(); });
