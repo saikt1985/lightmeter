@@ -8,6 +8,10 @@ Two ways to read:
 
 Chrome on iPhone uses the same Safari engine, so live mode is relative-only there. Use photo mode on iPhone.
 
+## Live site
+
+https://luxcal.netlify.app (deploys from the main branch of saikt1985/lightmeter). Add it to the phone's home screen.
+
 ## Run it on your phone
 
 The camera API only works on an HTTPS page (or `localhost`), so the file has to be served, not opened from the file system.
