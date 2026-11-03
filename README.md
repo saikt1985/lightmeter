@@ -10,7 +10,7 @@ Chrome on iPhone uses the same Safari engine, so live mode is relative-only ther
 
 ## Live site
 
-https://luxcal.netlify.app (deploys from the main branch of saikt1985/lightmeter). Add it to the phone's home screen.
+https://luxcalc.netlify.app (deploys from the main branch of saikt1985/lightmeter). Add it to the phone's home screen.
 
 ## Run it on your phone
 
