@@ -283,7 +283,9 @@ async function startCamera(){
   el.btnLock.disabled=!state.canLock; state.locked=false; el.btnLock.textContent='Lock exposure';
   const s=state.track.getSettings();
   if(!(s.exposureTime>0 && s.iso>0)){
-    showMsg('This browser does not report shutter time and ISO for the camera, so only relative brightness can be shown, not lux. Android Chrome reports them on most phones; iOS Safari does not.', false);
+    showMsg('This phone does not report shutter time and ISO to the browser (normal on iPhone), so the live number is only a relative index, not lux. Use Take photo instead: it reads the exposure data stored in the photo.', false);
+    const b=document.createElement('button'); b.className='primary'; b.style.marginTop='8px'; b.textContent='Take photo instead';
+    b.addEventListener('click',()=>$('#photoIn').click()); el.camMsg.appendChild(document.createElement('br')); el.camMsg.appendChild(b);
   } else showMsg('');
   state.running=true; state.ema=null; state.hold=null; state.n=0; sample();
 }
