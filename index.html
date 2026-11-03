@@ -158,7 +158,7 @@ details p{font-size:.86rem;color:var(--muted)}
   </div>
   <div id="photoMsg" class="msg" hidden style="margin-top:10px"></div>
   <p class="note">Fill the whole frame with the matte surface (surface mode) or hold the paper over the lens (incident mode), then shoot. Turn off flash. Each photo replaces the live reading above; press Log reading to keep it.</p>
-  <p class="note"><b>iPhone:</b> if Take photo reports missing exposure data, Safari re-encoded the capture. Shoot with the Camera app instead, then press From library and pick that photo. Set Settings → Camera → Formats → Most Compatible first so it is a JPEG.</p>
+  <p class="note"><b>iPhone:</b> photos taken through the browser lose their exposure tags, so shoot with the Camera app, then pick that photo from the library here. Set Settings → Camera → Formats → Most Compatible first so it is a JPEG.</p>
 </section>
 
 <section class="panel" id="alsPanel" hidden>
@@ -286,9 +286,11 @@ async function startCamera(){
   el.btnLock.disabled=!state.canLock; state.locked=false; el.btnLock.textContent='Lock exposure';
   const s=state.track.getSettings();
   if(!(s.exposureTime>0 && s.iso>0)){
-    showMsg('This phone does not report shutter time and ISO to the browser (normal on iPhone), so the live number is only a relative index, not lux. Use Take photo instead: it reads the exposure data stored in the photo.', false);
-    const b=document.createElement('button'); b.className='primary'; b.style.marginTop='8px'; b.textContent='Take photo instead';
-    b.addEventListener('click',()=>$('#photoIn').click()); el.camMsg.appendChild(document.createElement('br')); el.camMsg.appendChild(b);
+    showMsg(isIOS
+      ? 'iPhone does not report shutter time and ISO to the browser, so the live number is only a relative index, not lux. Shoot the surface with the Camera app, then pick that photo from the library below.'
+      : 'This phone does not report shutter time and ISO to the browser, so the live number is only a relative index, not lux. Use Take photo instead: it reads the exposure data stored in the photo.', false);
+    const b=document.createElement('button'); b.className='primary'; b.style.marginTop='8px'; b.textContent=isIOS?'Pick photo from library':'Take photo instead';
+    b.addEventListener('click',()=>$(isIOS?'#photoLib':'#photoIn').click()); el.camMsg.appendChild(document.createElement('br')); el.camMsg.appendChild(b);
   } else showMsg('');
   state.running=true; state.ema=null; state.hold=null; state.n=0; sample();
 }
@@ -480,6 +482,8 @@ async function processPhoto(file){
   $('#photoDiag').textContent=parts.join(' · ');
   if(Lbv!=null && Lexp!=null && (Lbv/Lexp>2.5||Lexp/Lbv>2.5)) showPhotoMsg('The two estimates disagree a lot, which usually means the frame was not evenly filled or the phone applied heavy HDR. Reshoot with the surface filling the frame.',false);
 }
+const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+if(isIOS){ $('#btnPhoto').hidden=true; $('#btnLib').classList.add('primary'); $('#btnLib').textContent='Pick photo from library'; }
 $('#btnPhoto').addEventListener('click',()=>$('#photoIn').click());
 $('#photoIn').addEventListener('change',e=>{ processPhoto(e.target.files[0]); e.target.value=''; });
 $('#btnLib').addEventListener('click',()=>$('#photoLib').click());

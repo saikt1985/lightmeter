@@ -31,9 +31,11 @@ Add it to the home screen for a full-screen app feel.
 ## Taking a reading on iPhone (photo mode)
 
 1. Settings → Camera → Formats → **Most Compatible** (so photos are JPEG with full exposure data).
-2. Open the page, pick Surface or Incident mode, press **Take photo**. Choose the camera, not the library.
-3. Fill the whole frame with the matte surface, or hold a sheet of paper over the lens for incident mode. Flash off. Shoot.
+2. In the **Camera app**, fill the whole frame with the matte surface, or hold a sheet of paper over the lens for incident mode. Flash off. Shoot.
+3. Open the page, pick Surface or Incident mode, press **Pick photo from library** and choose that photo.
 4. The reading appears at the top. Add a point label and press **Log reading**.
+
+Photos taken through the browser's own camera button lose their exposure tags on iPhone (Safari re-encodes them), which is why the Camera app is used. Verified on a real iPhone: library photos carry the tags, browser captures do not.
 
 The small grey line under the button shows what the photo carried: shutter, ISO, aperture, the metered brightness value and the two luminance estimates. If the two estimates differ by a lot, reshoot with the frame evenly filled.
 
