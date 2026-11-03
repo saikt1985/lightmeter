@@ -184,7 +184,7 @@ details p{font-size:.86rem;color:var(--muted)}
     <button id="btnCal">Calibrate to reference</button>
     <button id="btnCalReset">Reset factor</button>
   </div>
-  <p class="note">Put the phone and a real lux meter side by side under the same light, let the reading settle, enter what the meter says and press Calibrate. Do this once per mode. Factors are stored on this device.</p>
+  <p class="note">The app ships with a preset surface-mode factor measured on an iPhone against a reference meter, so it works without a meter. If you have one: put the phone and the meter side by side under the same light, enter what the meter says and press Calibrate. Your factor then replaces the preset on this device. Reset returns to the preset.</p>
 </section>
 
 <section class="panel">
@@ -231,19 +231,21 @@ const el = {
   label:$('#label'), btnLog:$('#btnLog'), logBody:$('#logBody'), btnCsv:$('#btnCsv'), btnCopy:$('#btnCopy'), btnClear:$('#btnClear'), unit:$('#unit')
 };
 
+// Built-in calibration: surface mode factor from an iPhone reading against a reference meter (683 lux, factor 0.962, Nov 2026).
+const DEFAULT_CAL={surface:0.962, incident:1};
 const state = {
   stream:null, track:null, facing:'environment', running:false, locked:false,
   mode:'surface', N:1.8, apertureEdited:false, rho:0.85, tau:0.30,
-  cal:{surface:1, incident:1}, unit:'lux',
+  cal:{surface:DEFAULT_CAL.surface, incident:DEFAULT_CAL.incident}, userCal:{surface:false, incident:false}, unit:'lux',
   ema:null, raw:null, last:null, n:0, hold:null, holdSamples:null, log:[]
 };
 
 // ---------- persistence (per-device conveniences only) ----------
 const KEY='pocket-lux-meter.v1';
 function load(){ try{ const s=JSON.parse(localStorage.getItem(KEY)||'{}');
-  if(s.cal) state.cal={...state.cal,...s.cal}; if(s.rho) state.rho=s.rho; if(s.tau) state.tau=s.tau;
+  if(s.cal&&s.userCal){ for(const m of ['surface','incident']) if(s.userCal[m]&&s.cal[m]>0){ state.cal[m]=s.cal[m]; state.userCal[m]=true; } } if(s.rho) state.rho=s.rho; if(s.tau) state.tau=s.tau;
   if(s.N){state.N=s.N; state.apertureEdited=true;} if(s.unit) state.unit=s.unit; if(Array.isArray(s.log)) state.log=s.log; }catch(e){} }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify({cal:state.cal,rho:state.rho,tau:state.tau,N:state.apertureEdited?state.N:undefined,unit:state.unit,log:state.log.slice(-200)})); }catch(e){} }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({cal:state.cal,userCal:state.userCal,rho:state.rho,tau:state.tau,N:state.apertureEdited?state.N:undefined,unit:state.unit,log:state.log.slice(-200)})); }catch(e){} }
 
 // ---------- sRGB -> linear lookup ----------
 const LIN=new Float32Array(256);
@@ -349,7 +351,7 @@ function sample(){
     if(state.holdSamples){ state.holdSamples.push(value); }
     render();
     el.diag.textContent = absolute
-      ? `t ${tUnits} ×100µs (1/${Math.round(10000/tUnits)} s) · ISO ${iso} · f/${N} · Y ${y.toFixed(3)} · L ${L.toFixed(1)} cd/m² · ${state.locked?'manual':'auto'} exposure`
+      ? `t ${tUnits} ×100µs (1/${Math.round(10000/tUnits)} s) · ISO ${iso} · f/${N} · Y ${y.toFixed(3)} · L ${L.toFixed(1)} cd/m² · ${state.locked?'manual':'auto'} exposure · ×${state.cal[state.mode].toFixed(3)}`
       : `no exposure data · Y ${y.toFixed(3)} · relative index only`;
   }
   setTimeout(sample,125);
@@ -370,7 +372,8 @@ function render(){
   const clip = r.sat>0.05 || r.dark>0.5;
   el.bExp.hidden=!clip; if(clip) setBadge(el.bExp, r.sat>0.05?'clipping':'too dark','bad');
   if(!r.absolute) setBadge(el.bConf,'relative only','bad');
-  else if(state.cal[state.mode]!==1) setBadge(el.bConf,'calibrated','ok');
+  else if(state.userCal[state.mode]) setBadge(el.bConf,'calibrated','ok');
+  else if(state.cal[state.mode]!==1) setBadge(el.bConf,'preset cal','');
   else setBadge(el.bConf,'uncalibrated','warn');
 }
 
@@ -389,7 +392,7 @@ function logReading(){
   const lux = state.hold!=null ? state.hold : r.lux;
   const now=new Date();
   state.log.push({ time:now.toISOString(), label:el.label.value.trim(), lux:+lux.toFixed(1), absolute:r.absolute, mode:state.mode,
-    ev: r.absolute&&r.L>0 ? +(Math.log2(r.L*8)).toFixed(1) : null, conf: !r.absolute?'relative':(state.cal[state.mode]!==1?'calibrated':'uncalibrated'), held: state.hold!=null, source: r.source||'live' });
+    ev: r.absolute&&r.L>0 ? +(Math.log2(r.L*8)).toFixed(1) : null, conf: !r.absolute?'relative':(state.userCal[state.mode]?'calibrated':(state.cal[state.mode]!==1?'preset':'uncalibrated')), held: state.hold!=null, source: r.source||'live', camera: r.camera||'' });
   state.hold=null; el.label.value=''; save(); renderLog(); render();
 }
 function renderLog(){
@@ -401,8 +404,8 @@ function renderLog(){
   const has=state.log.length>0; el.btnCsv.disabled=!has; el.btnCopy.disabled=!has; el.btnClear.disabled=!has;
 }
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function csv(){ const rows=[['time','point','lux','footcandles','ev100','mode','confidence','source']];
-  for(const e of state.log) rows.push([e.time,e.label,e.absolute?e.lux:'',e.absolute?(e.lux/10.7639).toFixed(2):'',e.ev??'',e.mode,e.conf,e.source||(e.held?'live-held':'live')]);
+function csv(){ const rows=[['time','point','lux','footcandles','ev100','mode','confidence','source','camera']];
+  for(const e of state.log) rows.push([e.time,e.label,e.absolute?e.lux:'',e.absolute?(e.lux/10.7639).toFixed(2):'',e.ev??'',e.mode,e.conf,e.source||(e.held?'live-held':'live'),e.camera||'']);
   return rows.map(r=>r.map(v=>/[",\n]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n'); }
 
 // ---------- photo mode: read EXIF exposure data from a captured JPEG ----------
@@ -428,11 +431,12 @@ function parseExif(buf){
           const dataOff = (type===5||type===10) ? u32(vo) : vo;
           if(tag===0x8769) exifPtr=u32(vo);
           else if(wanted[tag]){ const k=wanted[tag];
-            if(type===3) out[k]=u16(vo); else if(type===4) out[k]=u32(vo);
+            if(type===2){ const o=cnt>4?u32(vo):vo; let str=''; for(let j=0;j<cnt-1&&j<64&&t+o+j<dv.byteLength;j++) str+=String.fromCharCode(dv.getUint8(t+o+j)); out[k]=str.trim(); }
+            else if(type===3) out[k]=u16(vo); else if(type===4) out[k]=u32(vo);
             else if(type===5) out[k]=rat(dataOff,false); else if(type===10) out[k]=rat(dataOff,true); }
         } return exifPtr; };
       const EXIFTAGS={0x829A:'exposureTime',0x829D:'fNumber',0x8827:'iso',0x9203:'brightness',0x9204:'exposureBias',0x9202:'apertureValue',0x9201:'shutterSpeedValue'};
-      const exifPtr=readIfd(u32(4),Object.assign({0x0112:'orientation'},EXIFTAGS),out._ifd0);
+      const exifPtr=readIfd(u32(4),Object.assign({0x0112:'orientation',0x0110:'model'},EXIFTAGS),out._ifd0);
       if(exifPtr) readIfd(exifPtr,EXIFTAGS,out._exif);
       if(out.exposureTime==null && out.shutterSpeedValue!=null) out.exposureTime=Math.pow(2,-out.shutterSpeedValue);
       if(out.fNumber==null && out.apertureValue!=null) out.fNumber=Math.pow(2,out.apertureValue/2);
@@ -473,12 +477,12 @@ async function processPhoto(file){
   const lux = (state.mode==='surface' ? Math.PI*L/state.rho : Math.PI*L/state.tau);
   state.raw=lux; const value=lux*state.cal[state.mode];
   state.ema=value; state.hold=value; state.n++;
-  state.last={lux:value, absolute:true, y:px.y, sat:px.sat, dark:px.dark, t:ex.exposureTime, iso:ex.iso, L, source:'photo'};
+  state.last={lux:value, absolute:true, y:px.y, sat:px.sat, dark:px.dark, t:ex.exposureTime, iso:ex.iso, L, source:'photo', camera:ex.model||''};
   render(); el.btnLog.disabled=false;
   const parts=[];
   if(ex.exposureTime) parts.push('1/'+Math.round(1/ex.exposureTime)+' s'); if(ex.iso) parts.push('ISO '+ex.iso); if(ex.fNumber) parts.push('f/'+ex.fNumber.toFixed(1));
   if(Lbv!=null) parts.push('Bv '+ex.brightness.toFixed(2)+' → '+Lbv.toFixed(1)+' cd/m²'); if(Lexp!=null) parts.push('exposure+pixels → '+Lexp.toFixed(1)+' cd/m²');
-  if(isFinite(px.y)) parts.push('Y '+px.y.toFixed(3));
+  if(isFinite(px.y)) parts.push('Y '+px.y.toFixed(3)); if(ex.model) parts.push(ex.model);
   $('#photoDiag').textContent=parts.join(' · ');
   if(Lbv!=null && Lexp!=null && (Lbv/Lexp>2.5||Lexp/Lbv>2.5)) showPhotoMsg('The two estimates disagree a lot, which usually means the frame was not evenly filled or the phone applied heavy HDR. Reshoot with the surface filling the frame.',false);
 }
@@ -521,13 +525,13 @@ el.aperture.addEventListener('input',()=>{ const v=parseFloat(el.aperture.value)
 el.rho.addEventListener('input',()=>{ const v=parseFloat(el.rho.value); if(v>0){state.rho=v; save();} });
 el.tau.addEventListener('input',()=>{ const v=parseFloat(el.tau.value); if(v>0){state.tau=v; save();} });
 el.unit.addEventListener('change',()=>{ state.unit=el.unit.value; save(); render(); });
-el.calFactor.addEventListener('input',()=>{ const v=parseFloat(el.calFactor.value); if(v>0){ state.cal[state.mode]=v; save(); render(); } });
+el.calFactor.addEventListener('input',()=>{ const v=parseFloat(el.calFactor.value); if(v>0){ state.cal[state.mode]=v; state.userCal[state.mode]=true; save(); render(); } });
 el.btnCal.addEventListener('click',()=>{
   const ref=parseFloat(el.refLux.value); const r=state.last;
   if(!(ref>0)||!r||!r.absolute||!(state.raw>0)){ showMsg('Need a live absolute reading and a reference value above zero to calibrate.',true); return; }
-  state.cal[state.mode]=ref/state.raw; el.calFactor.value=state.cal[state.mode].toFixed(3); state.ema=ref; save(); render(); showMsg('');
+  state.cal[state.mode]=ref/state.raw; state.userCal[state.mode]=true; el.calFactor.value=state.cal[state.mode].toFixed(3); state.ema=ref; save(); render(); showMsg('');
 });
-el.btnCalReset.addEventListener('click',()=>{ state.cal[state.mode]=1; el.calFactor.value='1.000'; save(); render(); });
+el.btnCalReset.addEventListener('click',()=>{ state.cal[state.mode]=DEFAULT_CAL[state.mode]; state.userCal[state.mode]=false; el.calFactor.value=state.cal[state.mode].toFixed(3); save(); render(); });
 el.btnCsv.addEventListener('click',()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv()],{type:'text/csv'})); a.download=`lux-readings-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); });
 el.btnCopy.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(csv()); el.btnCopy.textContent='Copied'; setTimeout(()=>el.btnCopy.textContent='Copy CSV',1200);}catch(e){ showMsg('Clipboard blocked. Use Download CSV instead.',false);} });
 el.btnClear.addEventListener('click',()=>{ if(el.btnClear.textContent!=='Really clear?'){ el.btnClear.textContent='Really clear?'; setTimeout(()=>el.btnClear.textContent='Clear',2500); return; } state.log=[]; save(); renderLog(); el.btnClear.textContent='Clear'; });
