@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef0f3">
+<title>Pocket Lux Meter</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: single column tool. Readout first, scale, camera + controls, then the reading log. */
+:root{
+  --bg:#eef0f3; --panel:#ffffff; --fg:#17202a; --muted:#5d6b7a; --line:#cfd6de; --soft:#e2e7ec;
+  --accent:#0b6e7a; --accent-fg:#ffffff; --warn:#a85a00; --bad:#b3261e; --ok:#2a7a3b;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121519; --panel:#1b2026; --fg:#e8ecf0; --muted:#98a4b1; --line:#2f3841; --soft:#232a32;
+    --accent:#4fc1cc; --accent-fg:#0b1a1c; --warn:#f0a44a; --bad:#ff7b72; --ok:#6cc784; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121519; --panel:#1b2026; --fg:#e8ecf0; --muted:#98a4b1; --line:#2f3841; --soft:#232a32;
+  --accent:#4fc1cc; --accent-fg:#0b1a1c; --warn:#f0a44a; --bad:#ff7b72; --ok:#6cc784; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.45}
+body{padding-block:16px calc(32px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:560px;margin:0 auto;display:grid;gap:14px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:1.15rem;font-weight:600;margin:0;letter-spacing:-.01em}
+h2{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.readout{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:end}
+.lux{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(3rem,16vw,4.6rem);font-weight:600;line-height:1;letter-spacing:-.03em}
+.lux small{font-size:.3em;font-weight:500;color:var(--muted);margin-left:.15em;letter-spacing:0}
+.side{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.85rem;color:var(--muted);text-align:right;display:grid;gap:4px}
+.side b{color:var(--fg);font-weight:500}
+.badges{display:flex;gap:6px;flex-wrap:wrap;grid-column:1/-1}
+.badge{font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.badge.ok{border-color:var(--ok);color:var(--ok)}
+.badge.warn{border-color:var(--warn);color:var(--warn)}
+.badge.bad{border-color:var(--bad);color:var(--bad)}
+.scale{position:relative;height:76px;margin-top:10px}
+.scale .bar{position:absolute;left:0;right:0;top:22px;height:6px;border-radius:3px;background:linear-gradient(90deg,#1c2430,#5b6b84 35%,#c9d2dd 60%,#fff6d6 85%,#ffd27a)}
+.scale .tick{position:absolute;top:30px;transform:translateX(-50%);font-family:var(--mono);font-size:.62rem;color:var(--muted);text-align:center;line-height:1.15;white-space:nowrap}
+.scale .tick::before{content:"";display:block;width:1px;height:5px;background:var(--line);margin:0 auto 2px}
+.scale .tick.lo{top:30px}.scale .tick.lo::before{height:23px}
+.scale .needle{position:absolute;top:8px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:11px solid var(--accent);transform:translateX(-50%);transition:left .25s ease-out}
+@media (prefers-reduced-motion: reduce){.scale .needle{transition:none}}
+.cam{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:4/3;max-width:100%}
+video{width:100%;height:100%;object-fit:cover;display:block}
+.cam .box{position:absolute;left:25%;top:25%;width:50%;height:50%;border:1.5px dashed rgba(255,255,255,.7);border-radius:4px;pointer-events:none}
+.cam .off{position:absolute;inset:0;display:grid;place-items:center;color:#cfd6de;font-size:.9rem;text-align:center;padding:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row.between{justify-content:space-between}
+button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--soft);color:var(--fg);border-radius:8px;padding:9px 14px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label{font-size:.82rem;color:var(--muted);display:grid;gap:4px;min-width:0}
+input,select{font:inherit;font-family:var(--mono);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%;min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.note{font-size:.82rem;color:var(--muted);margin:8px 0 0}
+.note b{color:var(--fg);font-weight:500}
+.msg{font-size:.85rem;padding:9px 11px;border-radius:7px;border:1px solid var(--line);background:var(--soft)}
+.msg.bad{border-color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:.82rem;font-family:var(--mono);font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-family:var(--sans);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+td.num,th.num{text-align:right}
+.tablewrap{overflow-x:auto}
+details summary{cursor:pointer;font-weight:600;font-size:.9rem}
+details p{font-size:.86rem;color:var(--muted)}
+.diag{font-family:var(--mono);font-size:.74rem;color:var(--muted);word-break:break-word}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Pocket Lux Meter</h1>
+  <div class="row">
+    <label style="display:inline-grid">Unit
+      <select id="unit"><option value="lux">lux</option><option value="fc">footcandles</option></select>
+    </label>
+  </div>
+</header>
+
+<section class="panel" aria-live="polite">
+  <div class="readout">
+    <div class="lux" id="big">—<small id="bigUnit">lux</small></div>
+    <div class="side">
+      <div>EV<sub>100</sub> <b id="ev">—</b></div>
+      <div>held <b id="held">—</b></div>
+      <div>samples <b id="nsamp">0</b></div>
+    </div>
+    <div class="badges">
+      <span class="badge" id="bConf">idle</span>
+      <span class="badge" id="bMode">surface</span>
+      <span class="badge" id="bExp" hidden>clipping</span>
+    </div>
+  </div>
+  <div class="scale" id="scale">
+    <div class="bar"></div>
+    <div class="needle" id="needle" style="left:0%"></div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Camera sensor</h2>
+  <div class="cam">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="box" id="box" hidden></div>
+    <div class="off" id="camOff">Camera is off. Start it, then fill the dashed box with the surface you are measuring, or hold a diffuser over the lens for incident mode.</div>
+  </div>
+  <div class="row between" style="margin-top:10px">
+    <div class="row">
+      <button class="primary" id="btnStart">Start camera</button>
+      <button id="btnFlip" disabled>Flip</button>
+      <button id="btnLock" disabled>Lock exposure</button>
+    </div>
+    <button id="btnHold" disabled>Hold 2 s</button>
+  </div>
+  <div id="camMsg" class="msg" hidden></div>
+  <div class="grid2" style="margin-top:12px">
+    <label>Mode
+      <select id="mode">
+        <option value="surface">Surface (reflected)</option>
+        <option value="incident">Incident (diffuser on lens)</option>
+      </select>
+    </label>
+    <label>Lens aperture f/
+      <input id="aperture" type="number" step="0.1" min="1" max="4" value="1.8" inputmode="decimal">
+    </label>
+    <label id="lblRho">Target reflectance
+      <input id="rho" type="number" step="0.01" min="0.05" max="1" value="0.85" inputmode="decimal">
+    </label>
+    <label id="lblTau" hidden>Diffuser transmittance
+      <input id="tau" type="number" step="0.01" min="0.02" max="1" value="0.30" inputmode="decimal">
+    </label>
+  </div>
+  <p class="note" id="modeNote">Surface mode: fill the box with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.</p>
+  <div class="diag" id="diag" style="margin-top:8px"></div>
+</section>
+
+<section class="panel">
+  <h2>Photo reading (works on iPhone)</h2>
+  <p class="note" style="margin:0 0 10px">Takes one photo and reads the camera's own exposure record (shutter, ISO, aperture and metered brightness) from the file. This works in every phone browser, including Safari and Chrome on iPhone, because it does not need live camera settings.</p>
+  <div class="row">
+    <button class="primary" id="btnPhoto">Take photo</button>
+    <input id="photoIn" type="file" accept="image/jpeg,image/*" capture="environment" hidden>
+    <span class="diag" id="photoDiag"></span>
+  </div>
+  <div id="photoMsg" class="msg" hidden style="margin-top:10px"></div>
+  <p class="note">Fill the whole frame with the matte surface (surface mode) or hold the paper over the lens (incident mode), then shoot. Turn off flash. Each photo replaces the live reading above; press Log reading to keep it.</p>
+</section>
+
+<section class="panel" id="alsPanel" hidden>
+  <h2>Ambient light sensor</h2>
+  <div class="readout">
+    <div class="lux" id="alsBig" style="font-size:2.4rem">—<small>lux</small></div>
+    <div class="side"><div id="alsState">starting</div></div>
+  </div>
+  <p class="note">Direct reading from the phone's own light sensor (the one that dims the screen). Usually within 10 to 20 percent and already cosine corrected. Point the screen at the light.</p>
+</section>
+
+<section class="panel">
+  <h2>Calibration</h2>
+  <div class="grid2">
+    <label>Reference meter reads (lux)
+      <input id="refLux" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 420">
+    </label>
+    <label><span>Correction factor (<span id="calMode">surface</span>)</span>
+      <input id="calFactor" type="number" step="0.001" min="0.01" value="1.000" inputmode="decimal">
+    </label>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="btnCal">Calibrate to reference</button>
+    <button id="btnCalReset">Reset factor</button>
+  </div>
+  <p class="note">Put the phone and a real lux meter side by side under the same light, let the reading settle, enter what the meter says and press Calibrate. Do this once per mode. Factors are stored on this device.</p>
+</section>
+
+<section class="panel">
+  <h2>Readings</h2>
+  <div class="row">
+    <label style="flex:1 1 160px">Point label
+      <input id="label" type="text" placeholder="Desk A, 0.75 m">
+    </label>
+    <button id="btnLog" disabled>Log reading</button>
+  </div>
+  <div class="tablewrap" style="margin-top:10px">
+    <table>
+      <thead><tr><th>Time</th><th>Point</th><th class="num">lux</th><th class="num">fc</th><th class="num">EV</th><th>Mode</th><th>Conf.</th></tr></thead>
+      <tbody id="logBody"><tr><td colspan="7" style="color:var(--muted);font-family:var(--sans)">No readings yet. Hold 2 s, then Log reading.</td></tr></tbody>
+    </table>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="btnCsv" disabled>Download CSV</button>
+    <button id="btnCopy" disabled>Copy CSV</button>
+    <button id="btnClear" disabled>Clear</button>
+  </div>
+</section>
+
+<details class="panel">
+  <summary>How this works and what to trust</summary>
+  <p>The camera is used as a photometer. Each frame, the app reads the exposure the phone chose (shutter time and ISO) and the average linear brightness of the centre box, then solves the exposure equation for scene luminance: L = 12.5 × N² ÷ (ISO × t) × (Y ÷ 0.18) cd/m². In surface mode illuminance is E = π L ÷ reflectance. In incident mode a sheet of paper over the lens acts as a diffuser and E = π L ÷ transmittance.</p>
+  <p>Shutter and ISO come from the browser's camera settings. Android Chrome exposes them on most phones. iOS Safari does not, so on an iPhone this page can only show <b>relative</b> brightness, which is not a lux value. For iPhone an installed app that reads the camera's exposure data is needed.</p>
+  <p>Expected accuracy after one calibration against a real meter: roughly ±15 to 25 percent for lighting that resembles the calibration source. Camera sensors are not matched to the eye's V(λ) curve, so colour temperature and LED spectra shift the result. Without calibration, treat readings as ±50 percent. For compliance or handover documentation use a Class B or better lux meter.</p>
+  <p>The dashed box must be filled with an even, matte area. Avoid specular highlights, the light source itself, and strong gradients. The "clipping" badge appears when pixels saturate or the box is nearly black, which makes the reading unreliable.</p>
+</details>
+</main>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const el = {
+  big:$('#big'), bigUnit:$('#bigUnit'), ev:$('#ev'), held:$('#held'), nsamp:$('#nsamp'),
+  bConf:$('#bConf'), bMode:$('#bMode'), bExp:$('#bExp'), needle:$('#needle'), scale:$('#scale'),
+  video:$('#video'), box:$('#box'), camOff:$('#camOff'), camMsg:$('#camMsg'),
+  btnStart:$('#btnStart'), btnFlip:$('#btnFlip'), btnLock:$('#btnLock'), btnHold:$('#btnHold'),
+  mode:$('#mode'), aperture:$('#aperture'), rho:$('#rho'), tau:$('#tau'), lblRho:$('#lblRho'), lblTau:$('#lblTau'), modeNote:$('#modeNote'), diag:$('#diag'),
+  alsPanel:$('#alsPanel'), alsBig:$('#alsBig'), alsState:$('#alsState'),
+  refLux:$('#refLux'), calFactor:$('#calFactor'), calMode:$('#calMode'), btnCal:$('#btnCal'), btnCalReset:$('#btnCalReset'),
+  label:$('#label'), btnLog:$('#btnLog'), logBody:$('#logBody'), btnCsv:$('#btnCsv'), btnCopy:$('#btnCopy'), btnClear:$('#btnClear'), unit:$('#unit')
+};
+
+const state = {
+  stream:null, track:null, facing:'environment', running:false, locked:false,
+  mode:'surface', N:1.8, apertureEdited:false, rho:0.85, tau:0.30,
+  cal:{surface:1, incident:1}, unit:'lux',
+  ema:null, raw:null, last:null, n:0, hold:null, holdSamples:null, log:[]
+};
+
+// ---------- persistence (per-device conveniences only) ----------
+const KEY='pocket-lux-meter.v1';
+function load(){ try{ const s=JSON.parse(localStorage.getItem(KEY)||'{}');
+  if(s.cal) state.cal={...state.cal,...s.cal}; if(s.rho) state.rho=s.rho; if(s.tau) state.tau=s.tau;
+  if(s.N){state.N=s.N; state.apertureEdited=true;} if(s.unit) state.unit=s.unit; if(Array.isArray(s.log)) state.log=s.log; }catch(e){} }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({cal:state.cal,rho:state.rho,tau:state.tau,N:state.apertureEdited?state.N:undefined,unit:state.unit,log:state.log.slice(-200)})); }catch(e){} }
+
+// ---------- sRGB -> linear lookup ----------
+const LIN=new Float32Array(256);
+for(let i=0;i<256;i++){ const c=i/255; LIN[i]= c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); }
+
+// ---------- photometric scale (log, 0.1 .. 100 000 lux) ----------
+const MARKS=[[1,'1','moonlight'],[10,'10','street'],[100,'100','corridor'],[300,'300','office'],[1000,'1k','overcast'],[10000,'10k','shade'],[100000,'100k','sun']];
+const LMIN=Math.log10(0.1), LMAX=Math.log10(100000);
+const pct=lx=>Math.min(100,Math.max(0,(Math.log10(Math.max(lx,0.1))-LMIN)/(LMAX-LMIN)*100));
+for(const [v,t,name] of MARKS){ const d=document.createElement('div'); d.className='tick'+(MARKS.indexOf(MARKS.find(m=>m[0]===v))%2?' lo':''); d.style.left=pct(v)+'%'; d.innerHTML=`${t}<br>${name}`; el.scale.appendChild(d); }
+
+// ---------- camera ----------
+const W=96,H=72; const canvas=document.createElement('canvas'); canvas.width=W; canvas.height=H;
+const ctx=canvas.getContext('2d',{willReadFrequently:true});
+
+function showMsg(text,bad){ el.camMsg.textContent=text; el.camMsg.hidden=!text; el.camMsg.classList.toggle('bad',!!bad); }
+
+async function startCamera(){
+  stopCamera();
+  if(!navigator.mediaDevices?.getUserMedia){ showMsg('This browser cannot open the camera. Camera access needs HTTPS (or localhost) and a modern browser.',true); return; }
+  try{
+    state.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:state.facing},width:{ideal:640},height:{ideal:480}},audio:false});
+  }catch(e){
+    const why = e.name==='NotAllowedError' ? 'Camera permission was denied. Allow it in the browser site settings and try again.'
+      : e.name==='NotFoundError' ? 'No camera found on this device.'
+      : `Camera failed to start (${e.name}). ${location.protocol==='https:'||location.hostname==='localhost'?'':'Camera needs HTTPS or localhost.'}`;
+    showMsg(why,true); return;
+  }
+  state.track=state.stream.getVideoTracks()[0];
+  el.video.srcObject=state.stream;
+  try{ await el.video.play(); }catch(e){}
+  el.camOff.hidden=true; el.box.hidden=false;
+  el.btnStart.textContent='Stop camera'; el.btnFlip.disabled=false; el.btnHold.disabled=false; el.btnLog.disabled=false;
+  if(!state.apertureEdited){ state.N = state.facing==='environment' ? 1.8 : 2.2; el.aperture.value=state.N.toFixed(1); }
+  // Try to neutralise exposure compensation and offer manual lock where the browser allows it.
+  const caps = state.track.getCapabilities ? state.track.getCapabilities() : {};
+  const adv=[]; if(caps.exposureCompensation) adv.push({exposureCompensation:0});
+  if(adv.length){ try{ await state.track.applyConstraints({advanced:adv}); }catch(e){} }
+  state.canLock = Array.isArray(caps.exposureMode) && caps.exposureMode.includes('manual') && caps.exposureTime && caps.iso;
+  el.btnLock.disabled=!state.canLock; state.locked=false; el.btnLock.textContent='Lock exposure';
+  const s=state.track.getSettings();
+  if(!(s.exposureTime>0 && s.iso>0)){
+    showMsg('This browser does not report shutter time and ISO for the camera, so only relative brightness can be shown, not lux. Android Chrome reports them on most phones; iOS Safari does not.', false);
+  } else showMsg('');
+  state.running=true; state.ema=null; state.hold=null; state.n=0; sample();
+}
+function stopCamera(){
+  state.running=false;
+  if(state.stream){ for(const t of state.stream.getTracks()) t.stop(); }
+  state.stream=null; state.track=null; el.video.srcObject=null;
+  el.camOff.hidden=false; el.box.hidden=true;
+  el.btnStart.textContent='Start camera'; el.btnFlip.disabled=true; el.btnLock.disabled=true; el.btnHold.disabled=true; el.btnLog.disabled=true;
+  setBadge(el.bConf,'idle','');
+}
+async function toggleLock(){
+  if(!state.track||!state.canLock) return;
+  const s=state.track.getSettings();
+  try{
+    if(!state.locked){
+      await state.track.applyConstraints({advanced:[{exposureMode:'manual', exposureTime:s.exposureTime, iso:s.iso}]});
+      state.locked=true; el.btnLock.textContent='Unlock exposure';
+    }else{
+      await state.track.applyConstraints({advanced:[{exposureMode:'continuous'}]});
+      state.locked=false; el.btnLock.textContent='Lock exposure';
+    }
+  }catch(e){ showMsg('Exposure lock is not supported on this camera.',false); state.canLock=false; el.btnLock.disabled=true; }
+}
+
+function setBadge(b,text,cls){ b.textContent=text; b.className='badge'+(cls?' '+cls:''); }
+
+function sample(){
+  if(!state.running||!state.track) return;
+  const v=el.video;
+  if(v.readyState>=2 && v.videoWidth){
+    ctx.drawImage(v,0,0,W,H);
+    const d=ctx.getImageData(W>>2,H>>2,W>>1,H>>1).data;
+    let y=0,n=0,sat=0,dark=0;
+    for(let i=0;i<d.length;i+=4){
+      const r=d[i],g=d[i+1],b=d[i+2];
+      y+=0.2126*LIN[r]+0.7152*LIN[g]+0.0722*LIN[b]; n++;
+      if(r>=250||g>=250||b>=250) sat++; if(r<6&&g<6&&b<6) dark++;
+    }
+    y/=n;
+    const s=state.track.getSettings();
+    const tUnits=s.exposureTime, iso=s.iso, N=state.N;
+    let lux=null, L=null, absolute=false;
+    if(tUnits>0 && iso>0){
+      const t=tUnits/10000;               // MediaTrackSettings.exposureTime is in 100 µs units
+      L=12.5*N*N/(iso*t)*(y/0.18);        // cd/m², K = 12.5 reflected-light constant
+      lux = state.mode==='surface' ? Math.PI*L/state.rho : Math.PI*L/state.tau;
+      absolute=true;
+    }
+    const raw = absolute ? lux : y*1000;  // relative index when no exposure data
+    const value = raw*state.cal[state.mode];
+    state.raw=raw;
+    state.ema = state.ema==null ? value : state.ema + (value-state.ema)*0.35;
+    state.n++;
+    state.last={lux:state.ema, absolute, y, sat:sat/n, dark:dark/n, t:tUnits, iso, L};
+    if(state.holdSamples){ state.holdSamples.push(value); }
+    render();
+    el.diag.textContent = absolute
+      ? `t ${tUnits} ×100µs (1/${Math.round(10000/tUnits)} s) · ISO ${iso} · f/${N} · Y ${y.toFixed(3)} · L ${L.toFixed(1)} cd/m² · ${state.locked?'manual':'auto'} exposure`
+      : `no exposure data · Y ${y.toFixed(3)} · relative index only`;
+  }
+  setTimeout(sample,125);
+}
+
+function fmt(lx){ if(lx==null||!isFinite(lx)) return '—'; const v = state.unit==='fc' ? lx/10.7639 : lx;
+  return v>=1000 ? Math.round(v).toLocaleString() : v>=100 ? v.toFixed(0) : v>=10 ? v.toFixed(1) : v.toFixed(2); }
+
+function render(){
+  const r=state.last; if(!r) return;
+  const shown = state.hold!=null ? state.hold : r.lux;
+  el.big.firstChild.nodeValue = r.absolute ? fmt(shown) : Math.round(shown).toString();
+  el.bigUnit.textContent = r.absolute ? (state.unit==='fc'?'fc':'lux') : 'rel';
+  el.ev.textContent = r.absolute && r.L>0 ? (Math.log2(r.L*8)).toFixed(1) : '—';
+  el.held.textContent = state.hold!=null ? fmt(state.hold)+(state.unit==='fc'?' fc':' lx') : '—';
+  el.nsamp.textContent = state.n;
+  el.needle.style.left = r.absolute ? pct(shown)+'%' : '0%';
+  const clip = r.sat>0.05 || r.dark>0.5;
+  el.bExp.hidden=!clip; if(clip) setBadge(el.bExp, r.sat>0.05?'clipping':'too dark','bad');
+  if(!r.absolute) setBadge(el.bConf,'relative only','bad');
+  else if(state.cal[state.mode]!==1) setBadge(el.bConf,'calibrated','ok');
+  else setBadge(el.bConf,'uncalibrated','warn');
+}
+
+// ---------- hold / log ----------
+function hold(){
+  if(!state.running) return;
+  state.holdSamples=[]; state.hold=null; el.btnHold.disabled=true; el.btnHold.textContent='Holding…';
+  setTimeout(()=>{
+    const a=state.holdSamples||[]; state.holdSamples=null;
+    if(a.length){ a.sort((x,y)=>x-y); const trim=a.slice(Math.floor(a.length*0.1), Math.ceil(a.length*0.9)||1); state.hold=trim.reduce((p,c)=>p+c,0)/trim.length; }
+    el.btnHold.disabled=false; el.btnHold.textContent='Hold 2 s'; render();
+  },2000);
+}
+function logReading(){
+  const r=state.last; if(!r) return;
+  const lux = state.hold!=null ? state.hold : r.lux;
+  const now=new Date();
+  state.log.push({ time:now.toISOString(), label:el.label.value.trim(), lux:+lux.toFixed(1), absolute:r.absolute, mode:state.mode,
+    ev: r.absolute&&r.L>0 ? +(Math.log2(r.L*8)).toFixed(1) : null, conf: !r.absolute?'relative':(state.cal[state.mode]!==1?'calibrated':'uncalibrated'), held: state.hold!=null, source: r.source||'live' });
+  state.hold=null; el.label.value=''; save(); renderLog(); render();
+}
+function renderLog(){
+  if(!state.log.length){ el.logBody.innerHTML='<tr><td colspan="7" style="color:var(--muted);font-family:var(--sans)">No readings yet. Hold 2 s, then Log reading.</td></tr>'; }
+  else el.logBody.innerHTML = state.log.slice().reverse().map(e=>{
+    const t=new Date(e.time); const hh=t.toTimeString().slice(0,8);
+    return `<tr><td>${hh}</td><td>${esc(e.label)||'<span style="color:var(--muted)">—</span>'}</td><td class="num">${e.absolute?e.lux.toLocaleString():'—'}</td><td class="num">${e.absolute?(e.lux/10.7639).toFixed(1):'—'}</td><td class="num">${e.ev??'—'}</td><td>${e.mode}</td><td>${e.conf}${e.source==='photo'?' · photo':(e.held?' · held':'')}</td></tr>`;
+  }).join('');
+  const has=state.log.length>0; el.btnCsv.disabled=!has; el.btnCopy.disabled=!has; el.btnClear.disabled=!has;
+}
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function csv(){ const rows=[['time','point','lux','footcandles','ev100','mode','confidence','source']];
+  for(const e of state.log) rows.push([e.time,e.label,e.absolute?e.lux:'',e.absolute?(e.lux/10.7639).toFixed(2):'',e.ev??'',e.mode,e.conf,e.source||(e.held?'live-held':'live')]);
+  return rows.map(r=>r.map(v=>/[",\n]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n'); }
+
+// ---------- photo mode: read EXIF exposure data from a captured JPEG ----------
+function parseExif(buf){
+  const dv=new DataView(buf); if(dv.byteLength<4||dv.getUint16(0)!==0xFFD8) return null;
+  let off=2;
+  while(off+4<=dv.byteLength){
+    const marker=dv.getUint16(off); if((marker&0xFF00)!==0xFF00) return null;
+    if(marker===0xFFDA||marker===0xFFD9) return null;          // start of scan / end: no APP1 found
+    const len=dv.getUint16(off+2);
+    if(marker===0xFFE1 && dv.getUint32(off+4)===0x45786966){   // "Exif"
+      const t=off+10;                                           // TIFF header
+      const le = dv.getUint16(t)===0x4949;
+      const u16=o=>dv.getUint16(t+o,le), u32=o=>dv.getUint32(t+o,le), i32=o=>dv.getInt32(t+o,le);
+      if(u16(2)!==0x2A) return null;
+      const out={};
+      const rat=(o,signed)=>{ const n=signed?i32(o):u32(o), d=signed?i32(o+4):u32(o+4); return d? n/d : null; };
+      const readIfd=(ifd,wanted)=>{ const n=u16(ifd); let exifPtr=null;
+        for(let i=0;i<n;i++){ const e=ifd+2+i*12, tag=u16(e), type=u16(e+2), cnt=u32(e+4); const vo=e+8;
+          const dataOff = (type===5||type===10) ? u32(vo) : vo;
+          if(tag===0x8769) exifPtr=u32(vo);
+          else if(wanted[tag]){ const k=wanted[tag];
+            if(type===3) out[k]=u16(vo); else if(type===4) out[k]=u32(vo);
+            else if(type===5) out[k]=rat(dataOff,false); else if(type===10) out[k]=rat(dataOff,true); }
+        } return exifPtr; };
+      const exifPtr=readIfd(u32(4),{0x0112:'orientation',0x0110:'model'});
+      if(exifPtr) readIfd(exifPtr,{0x829A:'exposureTime',0x829D:'fNumber',0x8827:'iso',0x9203:'brightness',0x9204:'exposureBias',0x9202:'apertureValue',0x9201:'shutterSpeedValue'});
+      if(out.exposureTime==null && out.shutterSpeedValue!=null) out.exposureTime=Math.pow(2,-out.shutterSpeedValue);
+      if(out.fNumber==null && out.apertureValue!=null) out.fNumber=Math.pow(2,out.apertureValue/2);
+      return out;
+    }
+    off+=2+len;
+  }
+  return null;
+}
+function showPhotoMsg(text,bad){ const m=$('#photoMsg'); m.textContent=text; m.hidden=!text; m.classList.toggle('bad',!!bad); }
+async function centreLuma(file){
+  let bmp; try{ bmp=await createImageBitmap(file); }catch(e){
+    bmp=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(file); }); }
+  ctx.drawImage(bmp,0,0,W,H); if(bmp.close) bmp.close();
+  const d=ctx.getImageData(W>>2,H>>2,W>>1,H>>1).data; let y=0,n=0,sat=0,dark=0;
+  for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; y+=0.2126*LIN[r]+0.7152*LIN[g]+0.0722*LIN[b]; n++; if(r>=250||g>=250||b>=250) sat++; if(r<6&&g<6&&b<6) dark++; }
+  return {y:y/n, sat:sat/n, dark:dark/n};
+}
+async function processPhoto(file){
+  if(!file) return;
+  showPhotoMsg(''); $('#photoDiag').textContent='reading…';
+  if(state.running) stopCamera();
+  let ex=null; try{ ex=parseExif(await file.slice(0,262144).arrayBuffer()); }catch(e){}
+  let px={y:NaN,sat:0,dark:0}; try{ px=await centreLuma(file); }catch(e){}
+  if(!ex){ $('#photoDiag').textContent=''; showPhotoMsg('No exposure data found in this photo. Take it with the camera button (not from the library) and make sure the camera format is "Most Compatible" (JPEG) in iPhone settings.',true); return; }
+  const N = ex.fNumber>0 ? ex.fNumber : state.N;
+  let Lexp=null, Lbv=null;
+  if(ex.exposureTime>0 && ex.iso>0 && isFinite(px.y)) Lexp = 12.5*N*N/(ex.iso*ex.exposureTime)*(px.y/0.18);
+  if(typeof ex.brightness==='number' && isFinite(ex.brightness)) Lbv = 3.4*Math.pow(2,ex.brightness);   // APEX: Bv 0 ≈ 3.4 cd/m²
+  const L = Lbv ?? Lexp;
+  if(L==null){ $('#photoDiag').textContent=''; showPhotoMsg('The photo has exposure data but not enough to compute luminance (missing shutter, ISO or brightness value).',true); return; }
+  const lux = (state.mode==='surface' ? Math.PI*L/state.rho : Math.PI*L/state.tau);
+  state.raw=lux; const value=lux*state.cal[state.mode];
+  state.ema=value; state.hold=value; state.n++;
+  state.last={lux:value, absolute:true, y:px.y, sat:px.sat, dark:px.dark, t:ex.exposureTime, iso:ex.iso, L, source:'photo'};
+  render(); el.btnLog.disabled=false;
+  const parts=[];
+  if(ex.exposureTime) parts.push('1/'+Math.round(1/ex.exposureTime)+' s'); if(ex.iso) parts.push('ISO '+ex.iso); if(ex.fNumber) parts.push('f/'+ex.fNumber.toFixed(1));
+  if(Lbv!=null) parts.push('Bv '+ex.brightness.toFixed(2)+' → '+Lbv.toFixed(1)+' cd/m²'); if(Lexp!=null) parts.push('exposure+pixels → '+Lexp.toFixed(1)+' cd/m²');
+  if(isFinite(px.y)) parts.push('Y '+px.y.toFixed(3));
+  $('#photoDiag').textContent=parts.join(' · ');
+  if(Lbv!=null && Lexp!=null && (Lbv/Lexp>2.5||Lexp/Lbv>2.5)) showPhotoMsg('The two estimates disagree a lot, which usually means the frame was not evenly filled or the phone applied heavy HDR. Reshoot with the surface filling the frame.',false);
+}
+$('#btnPhoto').addEventListener('click',()=>$('#photoIn').click());
+$('#photoIn').addEventListener('change',e=>{ processPhoto(e.target.files[0]); e.target.value=''; });
+window.__processPhoto=processPhoto;
+
+// ---------- ambient light sensor (Android Chrome with sensor flag) ----------
+function startALS(){
+  if(!('AmbientLightSensor' in window)) return;
+  el.alsPanel.hidden=false;
+  try{
+    const s=new AmbientLightSensor({frequency:4});
+    s.addEventListener('reading',()=>{ el.alsBig.firstChild.nodeValue = s.illuminance>=100 ? Math.round(s.illuminance).toLocaleString() : s.illuminance.toFixed(1); el.alsState.textContent='live'; });
+    s.addEventListener('error',e=>{ el.alsState.textContent = e.error?.name==='NotAllowedError' ? 'blocked by permission' : 'unavailable'; });
+    s.start();
+  }catch(e){ el.alsState.textContent='unavailable'; }
+}
+
+// ---------- wiring ----------
+function applyMode(){
+  state.mode=el.mode.value; const inc=state.mode==='incident';
+  el.lblRho.hidden=inc; el.lblTau.hidden=!inc; el.calMode.textContent=state.mode; el.calFactor.value=state.cal[state.mode].toFixed(3);
+  setBadge(el.bMode,state.mode,''); state.ema=null; state.hold=null;
+  el.modeNote.textContent = inc
+    ? 'Incident mode: hold one sheet of plain white paper flat against the lens, paper facing the light. The default transmittance of 0.30 is a rough figure for 80 gsm copier paper. Calibrate once against a real meter for your paper.'
+    : 'Surface mode: fill the box with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.';
+}
+el.btnStart.addEventListener('click',()=> state.running ? stopCamera() : startCamera());
+el.btnFlip.addEventListener('click',()=>{ state.facing = state.facing==='environment'?'user':'environment'; startCamera(); });
+el.btnLock.addEventListener('click',toggleLock);
+el.btnHold.addEventListener('click',hold);
+el.btnLog.addEventListener('click',logReading);
+el.mode.addEventListener('change',applyMode);
+el.aperture.addEventListener('input',()=>{ const v=parseFloat(el.aperture.value); if(v>0){state.N=v; state.apertureEdited=true; save();} });
+el.rho.addEventListener('input',()=>{ const v=parseFloat(el.rho.value); if(v>0){state.rho=v; save();} });
+el.tau.addEventListener('input',()=>{ const v=parseFloat(el.tau.value); if(v>0){state.tau=v; save();} });
+el.unit.addEventListener('change',()=>{ state.unit=el.unit.value; save(); render(); });
+el.calFactor.addEventListener('input',()=>{ const v=parseFloat(el.calFactor.value); if(v>0){ state.cal[state.mode]=v; save(); render(); } });
+el.btnCal.addEventListener('click',()=>{
+  const ref=parseFloat(el.refLux.value); const r=state.last;
+  if(!(ref>0)||!r||!r.absolute||!(state.raw>0)){ showMsg('Need a live absolute reading and a reference value above zero to calibrate.',true); return; }
+  state.cal[state.mode]=ref/state.raw; el.calFactor.value=state.cal[state.mode].toFixed(3); state.ema=ref; save(); render(); showMsg('');
+});
+el.btnCalReset.addEventListener('click',()=>{ state.cal[state.mode]=1; el.calFactor.value='1.000'; save(); render(); });
+el.btnCsv.addEventListener('click',()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv()],{type:'text/csv'})); a.download=`lux-readings-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); });
+el.btnCopy.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(csv()); el.btnCopy.textContent='Copied'; setTimeout(()=>el.btnCopy.textContent='Copy CSV',1200);}catch(e){ showMsg('Clipboard blocked. Use Download CSV instead.',false);} });
+el.btnClear.addEventListener('click',()=>{ if(el.btnClear.textContent!=='Really clear?'){ el.btnClear.textContent='Really clear?'; setTimeout(()=>el.btnClear.textContent='Clear',2500); return; } state.log=[]; save(); renderLog(); el.btnClear.textContent='Clear'; });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && state.running) stopCamera(); });
+
+load();
+el.unit.value=state.unit; el.rho.value=state.rho; el.tau.value=state.tau; el.aperture.value=state.N.toFixed(1);
+applyMode(); renderLog(); startALS();
+})();
+</script>
+</body>
+</html>
