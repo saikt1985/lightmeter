@@ -31,13 +31,13 @@ Add it to the home screen for a full-screen app feel.
 ## Taking a reading on iPhone (photo mode)
 
 1. Settings → Camera → Formats → **Most Compatible** (so photos are JPEG with full exposure data).
-2. In the **Camera app**, fill the whole frame with the matte surface, or hold a sheet of paper over the lens for incident mode. Flash off. Shoot.
-3. Open the page, pick Surface or Incident mode, press **Pick photo from library** and choose that photo.
+2. In the **Camera app**, point at the surface so it fills the centre of the frame, or hold a sheet of paper over the lens for incident mode. Flash off. Shoot. Only the centre box of the picture is measured, the same box Android live mode uses; the page shows the photo with that box drawn on it.
+3. Open the page, pick Surface or Incident mode and the surface finish, press **Pick photo from library** and choose that photo. Changing the finish or mode afterwards re-derives the reading from the same photo.
 4. The reading appears at the top. Add a point label and press **Log reading**.
 
 Photos taken through the browser's own camera button lose their exposure tags on iPhone (Safari re-encodes them), which is why the Camera app is used. Verified on a real iPhone: library photos carry the tags, browser captures do not.
 
-The small grey line under the button shows what the photo carried: shutter, ISO, aperture, the metered brightness value and the two luminance estimates. If the two estimates differ by a lot, reshoot with the frame evenly filled.
+The small grey line under the button shows what the photo carried: shutter, ISO, aperture, the metered brightness value for the whole frame, the centre-to-frame ratio used to move it to the centre box, and the two luminance estimates. If the two estimates differ by a lot, reshoot with the centre box evenly filled.
 
 ## Taking a live reading (Android)
 
@@ -45,6 +45,12 @@ The small grey line under the button shows what the photo carried: shutter, ISO,
 2. **Surface mode**: fill the dashed box with a plain matte surface lit by the light you want to measure (a sheet of white paper on the desk works). Reading is the illuminance on that surface.
    **Incident mode**: hold one sheet of plain white copier paper flat over the rear lens, paper facing the light. Reading is the illuminance at the lens.
 3. Wait for the number to settle, press **Hold 2 s** for a trimmed average, then **Log reading** with a point label. Export the table as CSV.
+
+## Surface finish
+
+Surface mode turns the brightness of a surface into the light falling on it, so it has to know how much the surface reflects. The **Surface finish** selector offers white paper (0.85), white paint (0.75), light finishes and pale wood (0.50), mid tones and medium wood (0.35), dark wood and dark fabric (0.20), an 18% grey card (0.18) or a custom value. The chosen reflectance is shown in the mode badge and recorded in the CSV.
+
+A sheet of white paper laid on the spot is the only accurate route: real woods and paints vary by a third or more around those figures, and glossy finishes add reflections. Reading a wooden desk directly with "medium wood" selected gives an estimate, not a measurement. Incident mode (paper over the lens) is the other way to avoid the question.
 
 ## Calibrate once
 

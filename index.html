@@ -53,6 +53,7 @@ h2{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08e
 @media (prefers-reduced-motion: reduce){.scale .needle{transition:none}}
 .cam{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:4/3;max-width:100%}
 video{width:100%;height:100%;object-fit:cover;display:block}
+.cam canvas{display:block;width:100%;height:100%}
 .cam .box{position:absolute;left:25%;top:25%;width:50%;height:50%;border:1.5px dashed rgba(255,255,255,.7);border-radius:4px;pointer-events:none}
 .cam .off{position:absolute;inset:0;display:grid;place-items:center;color:#cfd6de;font-size:.9rem;text-align:center;padding:16px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -121,17 +122,29 @@ details p{font-size:.86rem;color:var(--muted)}
         <option value="incident">Incident (diffuser on lens)</option>
       </select>
     </label>
+    <label style="flex:1 1 200px" id="lblFinish">Surface finish (reflectance)
+      <select id="finish">
+        <option value="0.85">White paper or card (0.85)</option>
+        <option value="0.75">White painted wall or ceiling (0.75)</option>
+        <option value="0.50">Light finish, pale wood (0.50)</option>
+        <option value="0.35">Mid tone, medium wood (0.35)</option>
+        <option value="0.20">Dark wood, dark fabric (0.20)</option>
+        <option value="0.18">18% grey card (0.18)</option>
+        <option value="custom">Custom (set in Calibration)</option>
+      </select>
+    </label>
   </div>
-  <p class="note" id="modeNote">Surface mode: fill the frame with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.</p>
+  <p class="note" id="modeNote">Surface mode: the reading is the light falling on the surface in the centre box, worked out from how bright it looks and how much it reflects. Pick the finish you are pointing at. A sheet of white paper laid on the spot is the accurate route; other finishes are estimates, because a real wood or paint can be a third lighter or darker than the figure.</p>
 </section>
 
 <details class="panel sect" id="secIphone">
   <summary>iPhone: photo from library</summary>
   <ol class="steps">
     <li>Once: Settings → Camera → Formats → <b>Most Compatible</b>.</li>
-    <li>In the <b>Camera app</b>, fill the frame with the surface you are measuring (or hold a sheet of paper flat over the lens for incident mode). Flash off. Shoot.</li>
-    <li>Press the button and pick that photo.</li>
+    <li>In the <b>Camera app</b>, point at the surface you are measuring so it fills the <b>centre</b> of the frame (or hold a sheet of paper flat over the lens for incident mode). Flash off. Shoot.</li>
+    <li>Press the button and pick that photo. Only the dashed centre box of the picture is measured, the same box the Android camera uses.</li>
   </ol>
+  <div class="cam" id="photoPrevWrap" hidden><canvas id="photoPrev"></canvas><div class="box"></div></div>
   <div class="row">
     <button class="primary" id="btnLib">Pick photo from library</button>
     <button id="btnPhoto">Take photo</button>
@@ -140,7 +153,7 @@ details p{font-size:.86rem;color:var(--muted)}
   </div>
   <div class="diag" id="photoDiag" style="margin-top:8px"></div>
   <div id="photoMsg" class="msg" hidden style="margin-top:10px"></div>
-  <p class="note">The page reads the exposure record stored in the photo (shutter, ISO, aperture, metered brightness) and converts it to lux. Photos taken through the browser itself lose that record on iPhone, which is why the Camera app is used. Works on Android too. Each photo replaces the reading above; press Log reading to keep it.</p>
+  <p class="note">The page reads the exposure record stored in the photo (shutter, ISO, aperture, metered brightness), scales it to the centre box of the picture and converts it to lux. Photos taken through the browser itself lose that record on iPhone, which is why the Camera app is used. Works on Android too. Each photo replaces the reading above; press Log reading to keep it.</p>
 </details>
 
 <details class="panel sect" id="secAndroid">
@@ -228,8 +241,8 @@ details p{font-size:.86rem;color:var(--muted)}
 
 <details class="panel">
   <summary>How this works and what to trust</summary>
-  <p>The camera is used as a photometer. Each frame, the app reads the exposure the phone chose (shutter time and ISO) and the average linear brightness of the centre box, then solves the exposure equation for scene luminance: L = 12.5 × N² ÷ (ISO × t) × (Y ÷ 0.18) cd/m². In surface mode illuminance is E = π L ÷ reflectance. In incident mode a sheet of paper over the lens acts as a diffuser and E = π L ÷ transmittance.</p>
-  <p>Shutter and ISO come from the browser's camera settings. Android Chrome exposes them on most phones. iOS Safari does not, so on an iPhone this page can only show <b>relative</b> brightness, which is not a lux value. For iPhone an installed app that reads the camera's exposure data is needed.</p>
+  <p>The camera is used as a photometer. The app works out the luminance of the dashed centre box, then converts it to illuminance. In surface mode E = π L ÷ reflectance, so the finish you select matters: the same light on dark wood gives a quarter of the luminance of white paper, and the app corrects for that only as well as the chosen reflectance matches the real surface. In incident mode a sheet of paper over the lens acts as a diffuser and E = π L ÷ transmittance.</p>
+  <p>Android live mode reads the shutter time and ISO the camera chose and the average linear brightness of the box, and solves the exposure equation: L = 12.5 × N² ÷ (ISO × t) × (Y ÷ 0.18) cd/m². Photo mode reads the metered brightness the Camera app stored in the picture, which describes the whole frame, and scales it by how the centre box compares with the rest of the picture, so both paths measure the same patch. iOS Safari exposes none of this to live video, which is why the iPhone route goes through a photo.</p>
   <p>Expected accuracy after one calibration against a real meter: roughly ±15 to 25 percent for lighting that resembles the calibration source. Camera sensors are not matched to the eye's V(λ) curve, so colour temperature and LED spectra shift the result. Without calibration, treat readings as ±50 percent. For compliance or handover documentation use a Class B or better lux meter.</p>
   <p>The dashed box must be filled with an even, matte area. Avoid specular highlights, the light source itself, and strong gradients. The "clipping" badge appears when pixels saturate or the box is nearly black, which makes the reading unreliable.</p>
 </details>
@@ -243,7 +256,7 @@ const el = {
   bConf:$('#bConf'), bMode:$('#bMode'), bExp:$('#bExp'), needle:$('#needle'), scale:$('#scale'),
   video:$('#video'), box:$('#box'), camOff:$('#camOff'), camMsg:$('#camMsg'),
   btnStart:$('#btnStart'), btnFlip:$('#btnFlip'), btnLock:$('#btnLock'), btnHold:$('#btnHold'),
-  mode:$('#mode'), aperture:$('#aperture'), rho:$('#rho'), tau:$('#tau'), lblRho:$('#lblRho'), lblTau:$('#lblTau'), modeNote:$('#modeNote'), diag:$('#diag'),
+  mode:$('#mode'), finish:$('#finish'), lblFinish:$('#lblFinish'), aperture:$('#aperture'), rho:$('#rho'), tau:$('#tau'), lblRho:$('#lblRho'), lblTau:$('#lblTau'), modeNote:$('#modeNote'), diag:$('#diag'),
   alsPanel:$('#alsPanel'), alsBig:$('#alsBig'), alsState:$('#alsState'),
   refLux:$('#refLux'), calFactor:$('#calFactor'), calMode:$('#calMode'), btnCal:$('#btnCal'), btnCalReset:$('#btnCalReset'),
   label:$('#label'), btnLog:$('#btnLog'), logBody:$('#logBody'), btnCsv:$('#btnCsv'), btnCopy:$('#btnCopy'), btnClear:$('#btnClear'), unit:$('#unit')
@@ -253,7 +266,7 @@ const el = {
 const DEFAULT_CAL={surface:0.962, incident:1};
 const state = {
   stream:null, track:null, facing:'environment', running:false, locked:false,
-  mode:'surface', N:1.8, apertureEdited:false, rho:0.85, tau:0.30,
+  mode:'surface', N:1.8, apertureEdited:false, rho:0.85, tau:0.30, finish:'0.85',
   cal:{surface:DEFAULT_CAL.surface, incident:DEFAULT_CAL.incident}, userCal:{surface:false, incident:false}, unit:'lux',
   ema:null, raw:null, last:null, n:0, hold:null, holdSamples:null, log:[]
 };
@@ -261,9 +274,9 @@ const state = {
 // ---------- persistence (per-device conveniences only) ----------
 const KEY='pocket-lux-meter.v1';
 function load(){ try{ const s=JSON.parse(localStorage.getItem(KEY)||'{}');
-  if(s.cal&&s.userCal){ for(const m of ['surface','incident']) if(s.userCal[m]&&s.cal[m]>0){ state.cal[m]=s.cal[m]; state.userCal[m]=true; } } if(s.rho) state.rho=s.rho; if(s.tau) state.tau=s.tau;
+  if(s.cal&&s.userCal){ for(const m of ['surface','incident']) if(s.userCal[m]&&s.cal[m]>0){ state.cal[m]=s.cal[m]; state.userCal[m]=true; } } if(s.rho) state.rho=s.rho; if(s.tau) state.tau=s.tau; state.finish = s.finish || (Math.abs(state.rho-0.85)<1e-9?'0.85':'custom');
   if(s.N){state.N=s.N; state.apertureEdited=true;} if(s.unit) state.unit=s.unit; if(Array.isArray(s.log)) state.log=s.log; }catch(e){} }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify({cal:state.cal,userCal:state.userCal,rho:state.rho,tau:state.tau,N:state.apertureEdited?state.N:undefined,unit:state.unit,log:state.log.slice(-200)})); }catch(e){} }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({cal:state.cal,userCal:state.userCal,rho:state.rho,tau:state.tau,finish:state.finish,N:state.apertureEdited?state.N:undefined,unit:state.unit,log:state.log.slice(-200)})); }catch(e){} }
 
 // ---------- sRGB -> linear lookup ----------
 const LIN=new Float32Array(256);
@@ -409,7 +422,7 @@ function logReading(){
   const r=state.last; if(!r) return;
   const lux = state.hold!=null ? state.hold : r.lux;
   const now=new Date();
-  state.log.push({ time:now.toISOString(), label:el.label.value.trim(), lux:+lux.toFixed(1), absolute:r.absolute, mode:state.mode,
+  state.log.push({ time:now.toISOString(), label:el.label.value.trim(), lux:+lux.toFixed(1), absolute:r.absolute, mode:state.mode, rt: state.mode==='surface'?state.rho:state.tau,
     ev: r.absolute&&r.L>0 ? +(Math.log2(r.L*8)).toFixed(1) : null, conf: !r.absolute?'relative':(state.userCal[state.mode]?'calibrated':(state.cal[state.mode]!==1?'preset':'uncalibrated')), held: state.hold!=null, source: r.source||'live', camera: r.camera||'' });
   state.hold=null; el.label.value=''; save(); renderLog(); render();
 }
@@ -422,8 +435,8 @@ function renderLog(){
   const has=state.log.length>0; el.btnCsv.disabled=!has; el.btnCopy.disabled=!has; el.btnClear.disabled=!has;
 }
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function csv(){ const rows=[['time','point','lux','footcandles','ev100','mode','confidence','source','camera']];
-  for(const e of state.log) rows.push([e.time,e.label,e.absolute?e.lux:'',e.absolute?(e.lux/10.7639).toFixed(2):'',e.ev??'',e.mode,e.conf,e.source||(e.held?'live-held':'live'),e.camera||'']);
+function csv(){ const rows=[['time','point','lux','footcandles','ev100','mode','reflectance_or_transmittance','confidence','source','camera']];
+  for(const e of state.log) rows.push([e.time,e.label,e.absolute?e.lux:'',e.absolute?(e.lux/10.7639).toFixed(2):'',e.ev??'',e.mode,e.rt??'',e.conf,e.source||(e.held?'live-held':'live'),e.camera||'']);
   return rows.map(r=>r.map(v=>/[",\n]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n'); }
 
 // ---------- photo mode: read EXIF exposure data from a captured JPEG ----------
@@ -465,28 +478,40 @@ function parseExif(buf){
   return null;
 }
 function showPhotoMsg(text,bad){ const m=$('#photoMsg'); m.textContent=text; m.hidden=!text; m.classList.toggle('bad',!!bad); }
-async function centreLuma(file){
+const prevWrap=$('#photoPrevWrap'), prev=$('#photoPrev');
+async function analysePhoto(file){
   let bmp; try{ bmp=await createImageBitmap(file); }catch(e){
     bmp=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(file); }); }
+  const bw=bmp.width||bmp.naturalWidth, bh=bmp.height||bmp.naturalHeight;
+  // preview with the dashed centre box, so the user sees what was measured
+  const pw=Math.min(640,bw), ph=Math.round(pw*bh/bw); prev.width=pw; prev.height=ph; prevWrap.style.aspectRatio=bw+'/'+bh; prevWrap.hidden=false;
+  prev.getContext('2d').drawImage(bmp,0,0,pw,ph);
   ctx.drawImage(bmp,0,0,W,H); if(bmp.close) bmp.close();
-  const d=ctx.getImageData(W>>2,H>>2,W>>1,H>>1).data; let y=0,n=0,sat=0,dark=0;
-  for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; y+=0.2126*LIN[r]+0.7152*LIN[g]+0.0722*LIN[b]; n++; if(r>=250||g>=250||b>=250) sat++; if(r<6&&g<6&&b<6) dark++; }
-  return {y:y/n, sat:sat/n, dark:dark/n};
+  const stats=(x,y0,w,h)=>{ const d=ctx.getImageData(x,y0,w,h).data; let y=0,n=0,sat=0,dark=0;
+    for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; y+=0.2126*LIN[r]+0.7152*LIN[g]+0.0722*LIN[b]; n++; if(r>=250||g>=250||b>=250) sat++; if(r<6&&g<6&&b<6) dark++; }
+    return {y:y/n, sat:sat/n, dark:dark/n}; };
+  const c=stats(W>>2,H>>2,W>>1,H>>1), a=stats(0,0,W,H);
+  return {y:c.y, yAll:a.y, sat:c.sat, dark:c.dark};
 }
 async function processPhoto(file){
   if(!file) return;
   showPhotoMsg(''); $('#photoDiag').textContent='reading…';
   if(state.running) stopCamera();
   let ex=null; try{ ex=parseExif(await file.slice(0,262144).arrayBuffer()); }catch(e){}
-  let px={y:NaN,sat:0,dark:0}; try{ px=await centreLuma(file); }catch(e){}
+  let px={y:NaN,yAll:NaN,sat:0,dark:0}; try{ px=await analysePhoto(file); }catch(e){}
   const fileInfo=`${file.type||'unknown type'}, ${(file.size/1024).toFixed(0)} KB`;
   if(ex&&ex.heic){ $('#photoDiag').textContent=fileInfo; showPhotoMsg('This is a HEIC file, which the page cannot read exposure data from. Set Settings → Camera → Formats → Most Compatible so photos are JPEG, then shoot again.',true); return; }
   if(!ex){ $('#photoDiag').textContent=fileInfo; showPhotoMsg('No EXIF block found in this file. On iPhone: shoot with the Camera app (format Most Compatible), then use From library to pick that photo.',true); return; }
   const inventory=`EXIF ${ex._order}, IFD0 tags: ${ex._ifd0.join(' ')||'none'}; Exif IFD tags: ${ex._exif.join(' ')||'none'}`;
   const N = ex.fNumber>0 ? ex.fNumber : state.N;
-  let Lexp=null, Lbv=null;
+  let Lexp=null, Lbv=null, LbvFrame=null;
+  // centre box relative to the whole frame; 1.0 when the frame is evenly filled
+  const ratio = (isFinite(px.y)&&px.yAll>0) ? px.y/px.yAll : null;
   if(ex.exposureTime>0 && ex.iso>0 && isFinite(px.y)) Lexp = 12.5*N*N/(ex.iso*ex.exposureTime)*(px.y/0.18);
-  if(typeof ex.brightness==='number' && isFinite(ex.brightness)) Lbv = 3.4*Math.pow(2,ex.brightness);   // APEX: Bv 0 ≈ 3.4 cd/m²
+  if(typeof ex.brightness==='number' && isFinite(ex.brightness)){
+    LbvFrame = 3.4*Math.pow(2,ex.brightness);   // APEX: Bv 0 ≈ 3.4 cd/m², the camera's metering of the frame
+    Lbv = ratio!=null ? LbvFrame*ratio : LbvFrame;   // move it to the centre box
+  }
   const L = Lbv ?? Lexp;
   if(L==null){
     $('#photoDiag').textContent=fileInfo+' · '+inventory;
@@ -496,13 +521,15 @@ async function processPhoto(file){
   state.raw=lux; const value=lux*state.cal[state.mode];
   state.ema=value; state.hold=value; state.n++;
   state.last={lux:value, absolute:true, y:px.y, sat:px.sat, dark:px.dark, t:ex.exposureTime, iso:ex.iso, L, source:'photo', camera:ex.model||''};
+  state.lastRatio=ratio;
   render(); el.btnLog.disabled=false;
   const parts=[];
   if(ex.exposureTime) parts.push('1/'+Math.round(1/ex.exposureTime)+' s'); if(ex.iso) parts.push('ISO '+ex.iso); if(ex.fNumber) parts.push('f/'+ex.fNumber.toFixed(1));
-  if(Lbv!=null) parts.push('Bv '+ex.brightness.toFixed(2)+' → '+Lbv.toFixed(1)+' cd/m²'); if(Lexp!=null) parts.push('exposure+pixels → '+Lexp.toFixed(1)+' cd/m²');
+  if(LbvFrame!=null) parts.push('Bv '+ex.brightness.toFixed(2)+' → frame '+LbvFrame.toFixed(1)+' cd/m²'); if(ratio!=null) parts.push('centre/frame '+ratio.toFixed(2)); if(Lbv!=null) parts.push('centre '+Lbv.toFixed(1)+' cd/m²'); if(Lexp!=null) parts.push('exposure+pixels → '+Lexp.toFixed(1)+' cd/m²');
   if(isFinite(px.y)) parts.push('Y '+px.y.toFixed(3)); if(ex.model) parts.push(ex.model);
   $('#photoDiag').textContent=parts.join(' · ');
-  if(Lbv!=null && Lexp!=null && (Lbv/Lexp>2.5||Lexp/Lbv>2.5)) showPhotoMsg('The two estimates disagree a lot, which usually means the frame was not evenly filled or the phone applied heavy HDR. Reshoot with the surface filling the frame.',false);
+  if(Lbv!=null && Lexp!=null && (Lbv/Lexp>2.5||Lexp/Lbv>2.5)) showPhotoMsg('The two estimates disagree a lot, which usually means heavy HDR processing or a very uneven frame. Reshoot with the surface filling the centre box evenly.',false);
+  else if(ratio!=null && (ratio<0.5||ratio>2)) showPhotoMsg('The centre box is much '+(ratio<1?'darker':'brighter')+' than the rest of the picture. The reading is for the centre box only; for best accuracy fill more of the frame with the surface.',false);
 }
 const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 if(isIOS){ $('#btnPhoto').hidden=true; $('#secIphone').open=true; } else { $('#secAndroid').open=true; $('#btnPhoto').classList.add('primary'); $('#btnLib').classList.remove('primary'); }
@@ -525,14 +552,19 @@ function startALS(){
 }
 
 // ---------- wiring ----------
+function modeBadge(){ setBadge(el.bMode, state.mode==='incident' ? 'incident · τ '+state.tau.toFixed(2) : 'surface · ρ '+state.rho.toFixed(2), ''); }
+// a photo reading keeps its luminance, so a change of finish or mode re-derives the lux from it
+function recomputePhoto(){ const r=state.last; if(!r||r.source!=='photo'||!r.absolute||!(r.L>0)) return;
+  const raw = state.mode==='surface' ? Math.PI*r.L/state.rho : Math.PI*r.L/state.tau; state.raw=raw; r.lux=raw*state.cal[state.mode]; state.ema=r.lux; state.hold=r.lux; render(); }
 function applyMode(){
   state.mode=el.mode.value; const inc=state.mode==='incident';
-  el.lblRho.hidden=inc; el.lblTau.hidden=!inc; el.calMode.textContent=state.mode; el.calFactor.value=state.cal[state.mode].toFixed(3);
-  setBadge(el.bMode,state.mode,''); state.ema=null; state.hold=null;
+  el.lblRho.hidden=inc; el.lblTau.hidden=!inc; el.lblFinish.hidden=inc; el.calMode.textContent=state.mode; el.calFactor.value=state.cal[state.mode].toFixed(3);
+  modeBadge(); state.ema=null; state.hold=null; recomputePhoto();
   el.modeNote.textContent = inc
     ? 'Incident mode: hold one sheet of plain white paper flat against the lens, paper facing the light. The default transmittance of 0.30 is a rough figure for 80 gsm copier paper. Calibrate once against a real meter for your paper.'
-    : 'Surface mode: fill the frame with a plain matte surface. White copier paper is about 0.85 reflectance, an 18% grey card is 0.18. The reading is the illuminance falling on that surface.';
+    : 'Surface mode: the reading is the light falling on the surface in the centre box, worked out from how bright it looks and how much it reflects. Pick the finish you are pointing at. A sheet of white paper laid on the spot is the accurate route; other finishes are estimates, because a real wood or paint can be a third lighter or darker than the figure.';
 }
+el.finish.addEventListener('change',()=>{ state.finish=el.finish.value; if(state.finish!=='custom'){ state.rho=parseFloat(state.finish); el.rho.value=state.rho.toFixed(2); } save(); modeBadge(); recomputePhoto(); });
 el.btnStart.addEventListener('click',()=> state.running ? stopCamera() : startCamera());
 el.btnFlip.addEventListener('click',()=>{ state.facing = state.facing==='environment'?'user':'environment'; startCamera(); });
 el.btnLock.addEventListener('click',toggleLock);
@@ -540,8 +572,8 @@ el.btnHold.addEventListener('click',hold);
 el.btnLog.addEventListener('click',logReading);
 el.mode.addEventListener('change',applyMode);
 el.aperture.addEventListener('input',()=>{ const v=parseFloat(el.aperture.value); if(v>0){state.N=v; state.apertureEdited=true; save();} });
-el.rho.addEventListener('input',()=>{ const v=parseFloat(el.rho.value); if(v>0){state.rho=v; save();} });
-el.tau.addEventListener('input',()=>{ const v=parseFloat(el.tau.value); if(v>0){state.tau=v; save();} });
+el.rho.addEventListener('input',()=>{ const v=parseFloat(el.rho.value); if(v>0){ state.rho=v; const opt=[...el.finish.options].find(o=>o.value!=='custom'&&Math.abs(parseFloat(o.value)-v)<1e-9); state.finish=opt?opt.value:'custom'; el.finish.value=state.finish; save(); modeBadge(); recomputePhoto(); } });
+el.tau.addEventListener('input',()=>{ const v=parseFloat(el.tau.value); if(v>0){ state.tau=v; save(); modeBadge(); recomputePhoto(); } });
 el.unit.addEventListener('change',()=>{ state.unit=el.unit.value; save(); render(); });
 el.calFactor.addEventListener('input',()=>{ const v=parseFloat(el.calFactor.value); if(v>0){ state.cal[state.mode]=v; state.userCal[state.mode]=true; save(); render(); } });
 el.btnCal.addEventListener('click',()=>{
@@ -556,7 +588,7 @@ el.btnClear.addEventListener('click',()=>{ if(el.btnClear.textContent!=='Really 
 document.addEventListener('visibilitychange',()=>{ if(document.hidden && state.running) stopCamera(); });
 
 load();
-el.unit.value=state.unit; el.rho.value=state.rho; el.tau.value=state.tau; el.aperture.value=state.N.toFixed(1);
+el.unit.value=state.unit; el.rho.value=state.rho; el.tau.value=state.tau; el.aperture.value=state.N.toFixed(1); el.finish.value=state.finish; if(el.finish.value!==state.finish){ state.finish='custom'; el.finish.value='custom'; }
 applyMode(); renderLog(); startALS();
 })();
 </script>
